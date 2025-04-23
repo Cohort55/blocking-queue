@@ -1,39 +1,55 @@
 package ait.mediation;
 
 import java.util.LinkedList;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class BlkQueueImpl<T> implements BlkQueue<T> {
-    private LinkedList<T> queue = new LinkedList<>();
-    private int maxSize;
+    private final Lock mutex = new ReentrantLock();
+    private final Condition producerWaitCondition = mutex.newCondition();
+    private final Condition consumerWaitCondition = mutex.newCondition();
+    private final LinkedList<T> queue = new LinkedList<>();
+    private final int maxSize;
 
     public BlkQueueImpl(int maxSize) {
         this.maxSize = maxSize;
     }
 
     @Override
-    public synchronized void push(T message) {
-        while (queue.size() >= maxSize) {
-            try {
-                wait();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+    public void push(T message) {
+        mutex.lock();
+        try {
+            while (queue.size() >= maxSize) {
+                try {
+                    producerWaitCondition.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
+            queue.add(message);
+            consumerWaitCondition.signal();
+        } finally {
+            mutex.unlock();
         }
-        queue.add(message);
-        notify();
     }
 
     @Override
     public synchronized T pop() {
-        while (queue.isEmpty()) {
-            try {
-                wait();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+        mutex.lock();
+        try {
+            while (queue.isEmpty()) {
+                try {
+                    consumerWaitCondition.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
+            T message = queue.poll();
+            producerWaitCondition.signal();
+            return message;
+        } finally {
+            mutex.unlock();
         }
-        T message = queue.poll();
-        notifyAll();
-        return message;
     }
 }
