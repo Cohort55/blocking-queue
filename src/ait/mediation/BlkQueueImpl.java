@@ -35,7 +35,7 @@ public class BlkQueueImpl<T> implements BlkQueue<T> {
     }
 
     @Override
-    public synchronized T pop() {
+    public T pop() {
         mutex.lock();
         try {
             while (queue.isEmpty()) {
